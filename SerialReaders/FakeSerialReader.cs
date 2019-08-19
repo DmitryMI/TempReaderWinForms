@@ -61,7 +61,7 @@ namespace TempReaderWinForms.SerialReaders
             22.3f,  // 39
 
             22.4f,  // 40
-            22.4f,  // 4
+            22.4f,  // 41
         };
 
         private string GetFakeData(float temp)
