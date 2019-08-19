@@ -69,16 +69,16 @@ namespace TempReaderWinForms
         {
             try
             {
-                /*
+                
                  _serialPort = new SerialPort("COM3", BaudRate);
                 _serialPort.Open();
                 _serialPort.DiscardInBuffer();
 
                 _serialReader = new AsyncSerialReader(_serialPort);
-                */
+                
 
                 //_serialReader = new FakeSerialReader(null);
-                _serialReader = new LogReader(null, _logStream);
+                //_serialReader = new LogReader(null, _logStream);
 
                 MainTimer.Start();
             }
