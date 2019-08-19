@@ -69,13 +69,16 @@ namespace TempReaderWinForms
         {
             try
             {
-                _serialPort = new SerialPort("COM3", BaudRate);
+                /*
+                 _serialPort = new SerialPort("COM3", BaudRate);
                 _serialPort.Open();
                 _serialPort.DiscardInBuffer();
 
                 _serialReader = new AsyncSerialReader(_serialPort);
+                */
 
                 //_serialReader = new FakeSerialReader(null);
+                _serialReader = new LogReader(null, _logStream);
 
                 MainTimer.Start();
             }
@@ -98,37 +101,39 @@ namespace TempReaderWinForms
 
         private void ProcessSensor()
         {
-            string serialData = ReadSerialPort();
-
-            if(serialData == null)
-                return;
-            
-
-            if (serialData.StartsWith("ERR"))
+            while (true)
             {
-                LogLabel.Text = serialData;
-            }
-            else
-            {
-                SensorData sensorData = ParseSensorData(serialData);
-                _counter++;
+                string serialData = ReadSerialPort();
 
-                LogLabel.Text = "Measurements: " + _counter;
+                if (serialData == null)
+                    break;
 
-                DateTime dateTime = DateTime.Now;
-                float time = DateTime.Now.ToBinary();
-                float temperature = sensorData.PreciseTemperature;
-                float humidity = sensorData.PreciseHumidity;
-
-                PlotNewData(_counter, temperature, _temperatureLine);
-                PlotSmoothing(_counter, temperature, _smoothTempLine);
-                PlotNewData(_counter, humidity, _humidityLine);
-
-                LogSerialData(dateTime, serialData);
-
-                if (_counter > 1)
+                if (serialData.StartsWith("ERR"))
                 {
-                    RefreshPlotter();
+                    LogLabel.Text = serialData;
+                }
+                else
+                {
+                    SensorData sensorData = ParseSensorData(serialData);
+                    _counter++;
+
+                    LogLabel.Text = "Measurements: " + _counter;
+
+                    DateTime dateTime = DateTime.Now;
+                    float time = DateTime.Now.ToBinary();
+                    float temperature = sensorData.PreciseTemperature;
+                    float humidity = sensorData.PreciseHumidity;
+
+                    PlotNewData(_counter, temperature, _temperatureLine);
+                    PlotSmoothing(_counter, temperature, _smoothTempLine);
+                    PlotNewData(_counter, humidity, _humidityLine);
+
+                    LogSerialData(dateTime, serialData);
+
+                    if (_counter > 1)
+                    {
+                        RefreshPlotter();
+                    }
                 }
             }
         }
@@ -150,9 +155,13 @@ namespace TempReaderWinForms
             string line = time.ToLongTimeString() + "\t" + serialData + '\n';
             //SerialDataLogger.Text += line;
             SerialDataLogger.Text = line + SerialDataLogger.Text;
-            byte[] bytes = Encoding.ASCII.GetBytes(line);
-            _logStream.Write(bytes, 0, bytes.Length);
-            _logStream.Flush(true);
+
+            if (_logStream.CanWrite)
+            {
+                byte[] bytes = Encoding.ASCII.GetBytes(line);
+                _logStream.Write(bytes, 0, bytes.Length);
+                _logStream.Flush(true);
+            }
         }
 
         private string ReadSerialPort()

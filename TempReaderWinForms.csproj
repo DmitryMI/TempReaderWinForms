@@ -67,6 +67,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SensorData.cs" />
     <Compile Include="SerialReaders\FakeSerialReader.cs" />
+    <Compile Include="SerialReaders\LogReader.cs" />
     <Compile Include="SerialReaders\SerialReaderBase.cs" />
     <Compile Include="SerialReaders\SerialReader.cs" />
     <EmbeddedResource Include="MainForm.resx">

@@ -11,7 +11,10 @@ namespace TempReaderWinForms.DataSmoothing
     {
         private List<float> _queue = new List<float>();
         private List<float> _fixedQueue = new List<float>();
-        private int _lastFlatter = 3;
+        private int _lastFlatter = 0;
+
+        private int _intervalMaxLen = 10;
+        private float _sensitivityUnit = 0.1f;
 
         public float GetLastValue()
         {
@@ -38,47 +41,26 @@ namespace TempReaderWinForms.DataSmoothing
             if(_queue.Count < 4)
                 return;
 
-            for (int i = _lastFlatter; i < _queue.Count;)
+            for (int i = _lastFlatter; i < _queue.Count - 1;)
             {
-                int delta0 = GetDelta(i - 2, i - 3);
-                int delta1 = GetDelta(i - 1, i - 2);
-                int delta2 = GetDelta(i, i - 1);
-                bool noZeros = delta0 != 0 && delta1 != 0 && delta2 != 0;
-                bool isFlatter = noZeros && delta0 != delta1 && delta1 != delta2;
-                if (isFlatter)
+                float currentValue = _queue[i];
+                int regionStart = i;
+                i++;
+                while (i < _queue.Count - 1)
                 {
-                    int flatterStart = i - 3;
-                    int flatterEnd = i;
-                    if (i < _queue.Count)
+                    float nextValue = _queue[i];
+                    if (Math.Abs(nextValue - currentValue) > _sensitivityUnit * 1.5f)
                     {
-                        int delta = delta2;
-                        while (i < _queue.Count - 1)
-                        {
-                            i++;
-                            var lastDelta = delta;
-                            delta = GetDelta(i, i - 1);
-                            if (delta == 0 || lastDelta == delta)
-                            {
-                                _lastFlatter = i + 4;
-                                break;
-                            }
-                        }
-
-                        //i--;
-                        flatterEnd = i;
+                        _lastFlatter = i;
+                        break;
                     }
-                    
-                    ProcessFlatterRegion(flatterStart, flatterEnd);
-                    Debug.WriteLine("Resolving flatter on {0}, {1}", flatterStart, flatterEnd);
-                    i += 4;
-                }
-                else
-                {
-                    i += 1;
-                }
-            }
 
-            
+                    i++;
+                }
+
+                Debug.WriteLine("Processing region: {0}, {1}", regionStart, i);
+                ProcessFlatterRegion(regionStart, i);
+            }
         }
 
         private void ProcessFlatterRegion(int start, int end)
@@ -97,7 +79,7 @@ namespace TempReaderWinForms.DataSmoothing
             }
             else
             {
-                return;
+                //return;
                 // TODO Fix middle interpolation
 
                 int middleIndex = (int)Math.Round((end - start) / 2f + start);
@@ -110,7 +92,7 @@ namespace TempReaderWinForms.DataSmoothing
                     _fixedQueue[i] = Lerp(startValue, middleValue, i - halfStart, halfCount);
                 }
 
-                halfStart = middleIndex + 1;
+                halfStart = middleIndex;
                 halfCount = end - middleIndex;
                 for (int i = halfStart; i < end; i++)
                 {
