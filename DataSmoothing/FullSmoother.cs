@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace TempReaderWinForms.DataSmoothing
 {
-    class FullSmoother : IDataSmoother
+    class FullSmoother : IDataSmoother, IDelayedSmoother
     {
         private List<float> _queue = new List<float>();
         private List<float> _fixedQueue = new List<float>();
@@ -33,6 +33,11 @@ namespace TempReaderWinForms.DataSmoothing
             _queue.Add(value);
             _fixedQueue.Add(value);
 
+            //FixData();
+        }
+
+        public void MakeSmooth()
+        {
             FixData();
         }
 
@@ -61,7 +66,7 @@ namespace TempReaderWinForms.DataSmoothing
 
                 regionEnd = i;
 
-                Debug.WriteLine("Processing region: {0}, {1}", regionStart, regionEnd);
+                //Debug.WriteLine("Processing region: {0}, {1}", regionStart, regionEnd);
 
                 //ProcessFlatterRegion(regionStart, regionEnd);
 

@@ -8,16 +8,27 @@ using System.Threading.Tasks;
 
 namespace TempReaderWinForms.SerialReaders
 {
-    class LogReader : SerialReaderBase
+    class LogReader : SerialReaderBase, ISerialReaderTimed
     {
         private FileStream _stream;
+        private DateTime _lastDateTime;
+        private bool _wasReleased = false;
+
+        public override void Release()
+        {
+            base.Release();
+
+            _stream?.Close();
+            _stream?.Dispose();
+
+            _wasReleased = true;
+        }
 
         public LogReader(SerialPort serialPort, FileStream logFileStream) : base(serialPort)
         {
             if (!logFileStream.CanRead)
             {
-                logFileStream.Close();
-                _stream = new FileStream("log.txt", FileMode.Open, FileAccess.Read);
+                throw new ArgumentException("Stream must be readable");
             }
             else
             {
@@ -25,7 +36,7 @@ namespace TempReaderWinForms.SerialReaders
             }
         }
 
-        public override bool HasData => _stream.Position < _stream.Length;
+        public override bool HasData => !_wasReleased && _stream.Position < _stream.Length;
         public override void RequestData()
         {
             
@@ -49,9 +60,22 @@ namespace TempReaderWinForms.SerialReaders
 
             string logRecord = builder.ToString();
 
-            string data = logRecord.Split('\t')[1];
+            var split = logRecord.Split('\t');
+            string date = split[0];
+            
+            bool dateParsed = DateTime.TryParse(date, out _lastDateTime);
+            //DateTime.
+            /*if(!dateParsed)
+                _lastDateTime = new DateTime();*/
+
+            string data = split[1];
 
             return data;
+        }
+
+        public DateTime GetLastResultTime()
+        {
+            return _lastDateTime;
         }
     }
 }

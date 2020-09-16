@@ -1,8 +1,9 @@
-﻿using System.IO.Ports;
+﻿using System;
+using System.IO.Ports;
 
 namespace TempReaderWinForms.SerialReaders
 {
-    abstract class SerialReaderBase
+    abstract class SerialReaderBase : ISerialReader, IDisposable
     {
         public const int CmdPreciseSensor = 0x1;
         public const int CmdRoughSensor = 0x2;
@@ -10,6 +11,13 @@ namespace TempReaderWinForms.SerialReaders
         protected SerialPort SerialPort;
         public abstract bool HasData { get; }
         public abstract void RequestData();
+
+
+        public virtual void Release()
+        {
+            SerialPort?.Close();
+            SerialPort = null;
+        }
 
         public abstract string GetData();
 
@@ -36,6 +44,12 @@ namespace TempReaderWinForms.SerialReaders
         {
             byte[] sendBuffer = new byte[] { CmdPreciseSensor };
             SerialPort.Write(sendBuffer, 0, sendBuffer.Length);
+        }
+
+        public void Dispose()
+        {
+            Release();
+            SerialPort?.Dispose();
         }
     }
 }

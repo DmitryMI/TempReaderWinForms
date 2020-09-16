@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -29,9 +30,10 @@ namespace TempReaderWinForms
         private PlotModel _temperatureModel;
         private PlotModel _smoothTempModel;
         private PlotModel _humidityModel;
-        private SerialReaderBase _serialReader;
+        private ISerialReader _serialReader;
         private FileStream _logStream;
         private IDataSmoother _dataSmoother;
+        private bool _smoothingDirty = true;
 
         private int _counter = 0;
 
@@ -60,7 +62,7 @@ namespace TempReaderWinForms
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            InitLogFile();
+            //InitLogFile();
             InitPlot();
             InitListener();
         }
@@ -69,13 +71,17 @@ namespace TempReaderWinForms
         {
             try
             {
-                
                  _serialPort = new SerialPort("COM3", BaudRate);
                 _serialPort.Open();
                 _serialPort.DiscardInBuffer();
 
-                _serialReader = new AsyncSerialReader(_serialPort);
-                
+                var serialReader = new AsyncSerialReader(_serialPort);
+
+                FileStream logStream = new FileStream(LogFileName, FileMode.OpenOrCreate, FileAccess.Read);
+
+                var logReader = new LogReader(null, logStream);
+
+                _serialReader = new LoggedSerialReader(serialReader, logReader);
 
                 //_serialReader = new FakeSerialReader(null);
                 //_serialReader = new LogReader(null, _logStream);
@@ -103,36 +109,52 @@ namespace TempReaderWinForms
         {
             while (true)
             {
-                string serialData = ReadSerialPort();
+                //string serialData = ReadSerialPort();
+                string serialData;
+                DateTime? measurementTime;
+                ReadSerialPort(out serialData, out measurementTime);
 
                 if (serialData == null)
-                    break;
-
-                if (serialData.StartsWith("ERR"))
                 {
-                    LogLabel.Text = serialData;
+                    if(_smoothingDirty)
+                        DoSmoothing(_smoothTempLine);
+                    break;
                 }
                 else
                 {
-                    SensorData sensorData = ParseSensorData(serialData);
-                    _counter++;
 
-                    LogLabel.Text = "Measurements: " + _counter;
-
-                    DateTime dateTime = DateTime.Now;
-                    float time = DateTime.Now.ToBinary();
-                    float temperature = sensorData.PreciseTemperature;
-                    float humidity = sensorData.PreciseHumidity;
-
-                    PlotNewData(_counter, temperature, _temperatureLine);
-                    PlotSmoothing(_counter, temperature, _smoothTempLine);
-                    PlotNewData(_counter, humidity, _humidityLine);
-
-                    LogSerialData(dateTime, serialData);
-
-                    if (_counter > 1)
+                    if (serialData.StartsWith("ERR"))
                     {
-                        RefreshPlotter();
+                        LogLabel.Text = serialData;
+                    }
+                    else
+                    {
+                        _smoothingDirty = true;
+
+                        SensorData sensorData = ParseSensorData(serialData);
+                        _counter++;
+
+                        LogLabel.Text = "Measurements: " + _counter;
+                        
+                        //float time = DateTime.Now.ToBinary();
+                        DateTime dateTime = measurementTime ?? DateTime.Now;
+                        float time = dateTime.ToBinary();
+                        float temperature = sensorData.PreciseTemperature;
+                        float humidity = sensorData.PreciseHumidity;
+
+                        PlotNewData(_counter, temperature, _temperatureLine);
+                        PlotSmoothing(_counter, temperature, _smoothTempLine, false);
+                        PlotNewData(_counter, humidity, _humidityLine);
+
+                        if(ShouldInitLogFile())
+                            InitLogFile();
+
+                        LogSerialData(dateTime, serialData);
+
+                        if (_counter > 1)
+                        {
+                            RefreshPlotter();
+                        }
                     }
                 }
             }
@@ -150,13 +172,26 @@ namespace TempReaderWinForms
             _logStream = new FileStream(LogFileName, FileMode.Append, FileAccess.Write);
         }
 
+        private bool ShouldInitLogFile()
+        {
+            if (_logStream != null && _logStream.CanWrite)
+                return false;
+
+            if (_serialReader is LoggedSerialReader loggedSerialReader)
+            {
+                return loggedSerialReader.LogFileReleased;
+            }
+
+            return true;
+        }
+
         private void LogSerialData(DateTime time, string serialData)
         {
             string line = time.ToLongTimeString() + "\t" + serialData + '\n';
             //SerialDataLogger.Text += line;
             SerialDataLogger.Text = line + SerialDataLogger.Text;
 
-            if (_logStream.CanWrite)
+            if (_logStream != null && _logStream.CanWrite)
             {
                 byte[] bytes = Encoding.ASCII.GetBytes(line);
                 _logStream.Write(bytes, 0, bytes.Length);
@@ -177,6 +212,19 @@ namespace TempReaderWinForms
             }
 
             return null;
+        }
+
+        private void ReadSerialPort(out string data, out DateTime? dateNullable)
+        {
+            data = ReadSerialPort();
+            if (data != null && _serialReader is ISerialReaderTimed timedReader)
+            {
+                dateNullable = timedReader.GetLastResultTime();
+            }
+            else
+            {
+                dateNullable = null;
+            }
         }
 
         private SensorData ParseSensorData(string serialData)
@@ -256,14 +304,23 @@ namespace TempReaderWinForms
             line.Points.Add(new DataPoint(time, value));
         }
 
-        private void PlotSmoothing(float time, float value, DataPointSeries line)
+        private void PlotSmoothing(float time, float value, DataPointSeries line, bool doSmoothing)
         {
-            /*_dataSmoother.AddValue(value);
-            float smoothed = _dataSmoother.GetLastValue();
-            //float smoothed = value;
-            PlotNewData(time, smoothed, line);*/
             line.Points.Add(new DataPoint(time, value));
             _dataSmoother.AddValue(value);
+
+            if(doSmoothing)
+                DoSmoothing(line);
+        }
+
+        private void DoSmoothing(DataPointSeries line)
+        {
+            if (_dataSmoother is IDelayedSmoother delayedSmoother)
+            {
+                delayedSmoother.MakeSmooth();
+            }
+
+            Debug.WriteLine("Smoothing...");
             int lastIndex = line.Points.Count - 1;
 
             for (int i = 1; i < _dataSmoother.MaxBackIndex; i++)
